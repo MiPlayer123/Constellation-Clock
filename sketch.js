@@ -3,6 +3,7 @@
 
 let anchorStars = [];
 let cometParticles = [];
+let webConnections = []; // Pre-calculated for rhythmic growth
 let lastMinute = -1;
 let starRadius = 200; // Radius of the 12-hour circle
 
@@ -12,15 +13,66 @@ function setup() {
   
   // Initialize 12 anchor stars for the hours
   for (let i = 0; i < 12; i++) {
-    // 0 index is 12 o'clock (top)
     let angle = map(i, 0, 12, -HALF_PI, TWO_PI - HALF_PI);
     anchorStars.push({
       baseX: cos(angle) * starRadius,
       baseY: sin(angle) * starRadius,
       angle: angle,
-      id: i === 0 ? 12 : i // Label for internal logic
+      id: i === 0 ? 12 : i 
     });
   }
+
+  // Pre-calculate connections to ensure perimeter lines complete every 5 mins
+  generateWebConnections();
+}
+
+function generateWebConnections() {
+  let allPossible = [];
+  for (let i = 0; i < 12; i++) {
+    for (let j = i + 1; j < 12; j++) {
+      allPossible.push({ i, j });
+    }
+  }
+
+  // Separate perimeter (adjacent) and inner lines
+  let perimeter = [];
+  let inner = [];
+  for (let conn of allPossible) {
+    let diff = Math.abs(conn.i - conn.j);
+    if (diff === 1 || diff === 11) {
+      perimeter.push(conn);
+    } else {
+      inner.push(conn);
+    }
+  }
+  
+  // Sort perimeter: (0,1), (1,2) ... (11,0)
+  perimeter.sort((a, b) => {
+     let getPIdx = (c) => (c.i === 0 && c.j === 11) ? 11 : (c.i === 11 && c.j === 0 ? 11 : c.i);
+     return getPIdx(a) - getPIdx(b);
+  });
+
+  // Sort inner lines by their "average angle" to sweep clockwise
+  inner.sort((a, b) => {
+    let angA = (anchorStars[a.i].angle + anchorStars[a.j].angle) / 2;
+    let angB = (anchorStars[b.i].angle + anchorStars[b.j].angle) / 2;
+    // Normalize angles for sorting
+    if (angA < -HALF_PI) angA += TWO_PI;
+    if (angB < -HALF_PI) angB += TWO_PI;
+    return angA - angB;
+  });
+
+  // Interleave: 4-5 inner lines then 1 perimeter line every 5 minutes
+  webConnections = [];
+  let innerIdx = 0;
+  for (let p = 0; p < 12; p++) {
+    let take = (p % 2 === 0) ? 4 : 5; // Distribute 54 lines over 12 slots (4.5 avg)
+    for (let k = 0; k < take && innerIdx < inner.length; k++) {
+      webConnections.push(inner[innerIdx++]);
+    }
+    webConnections.push(perimeter[p]);
+  }
+  while (innerIdx < inner.length) webConnections.push(inner[innerIdx++]);
 }
 
 function windowResized() {
@@ -34,7 +86,6 @@ function draw() {
   let sec = second();
   let smoothSec = now.getSeconds() + now.getMilliseconds() / 1000;
 
-  // Minute change console logging
   if (min !== lastMinute) {
     console.log("Current Minute: " + min);
     lastMinute = min;
@@ -66,8 +117,6 @@ function drawAnchorStars(hr) {
     let x = star.baseX + nX;
     let y = star.baseY + nY;
 
-    // Correct hour logic: i=0 is 12, i=1 is 1, etc.
-    // The current hour is hour() % 12.
     let isCurrentHour = (i === hr);
     
     let pulse = isCurrentHour ? sin(frameCount * 0.05) * 5 + 10 : 5;
@@ -85,47 +134,39 @@ function drawAnchorStars(hr) {
 }
 
 function drawMinuteWeb(min) {
-  // Map 0-59 minutes to a number of lines (0 to 66)
-  let connectionsToDraw = floor(map(min, 0, 59, 0, 66));
+  // Map 0-59 minutes to our 66 pre-calculated connections
+  let connectionsToDraw = floor(map(min, 0, 59, 0, webConnections.length));
   
-  let count = 0;
-  for (let i = 0; i < 12; i++) {
-    for (let j = i + 1; j < 12; j++) {
-      if (count < connectionsToDraw) {
-        // High baseline visibility for all lines
-        let alpha = 80; 
-        let brightness = 90;
-        
-        // The very last few lines added in this minute "glow" to show current progress
-        let isRecent = (count >= connectionsToDraw - 1);
-        
-        if (isRecent) {
-          drawingContext.shadowBlur = 15;
-          drawingContext.shadowColor = color(200, 60, 100).toString();
-          stroke(200, 60, 100, 80); 
-          strokeWeight(1.2);
-        } else {
-          drawingContext.shadowBlur = 0;
-          stroke(200, 30, brightness, alpha);
-          strokeWeight(0.9);
-        }
-        
-        let x1 = anchorStars[i].baseX + (noise(i, frameCount * 0.005) * 15 - 7.5);
-        let y1 = anchorStars[i].baseY + (noise(i + 10, frameCount * 0.005) * 15 - 7.5);
-        let x2 = anchorStars[j].baseX + (noise(j, frameCount * 0.005) * 15 - 7.5);
-        let y2 = anchorStars[j].baseY + (noise(j + 10, frameCount * 0.005) * 15 - 7.5);
-        
-        line(x1, y1, x2, y2);
-        count++;
-        
-        // Reset shadow for the loop
-        drawingContext.shadowBlur = 0;
-      } else {
-        break;
-      }
+  for (let count = 0; count < connectionsToDraw; count++) {
+    let conn = webConnections[count];
+    
+    // Current drifting positions
+    let x1 = anchorStars[conn.i].baseX + (noise(conn.i, frameCount * 0.005) * 15 - 7.5);
+    let y1 = anchorStars[conn.i].baseY + (noise(conn.i + 10, frameCount * 0.005) * 15 - 7.5);
+    let x2 = anchorStars[conn.j].baseX + (noise(conn.j, frameCount * 0.005) * 15 - 7.5);
+    let y2 = anchorStars[conn.j].baseY + (noise(conn.j + 10, frameCount * 0.005) * 15 - 7.5);
+
+    let isRecent = (count >= connectionsToDraw - 1);
+    let alpha = 80;
+    let brightness = 90;
+    
+    if (isRecent) {
+      drawingContext.shadowBlur = 15;
+      drawingContext.shadowColor = color(200, 60, 100).toString();
+      stroke(200, 60, 100, 80);
+      strokeWeight(1.2);
+    } else {
+      drawingContext.shadowBlur = 0;
+      stroke(200, 30, brightness, alpha);
+      strokeWeight(0.9);
     }
+    
+    line(x1, y1, x2, y2);
+    drawingContext.shadowBlur = 0;
   }
 }
+
+// Remove the Stardust class as it's no longer used
 
 function drawOrbitingComet(smoothSec) {
   let angle = map(smoothSec, 0, 60, -HALF_PI, TWO_PI - HALF_PI);
