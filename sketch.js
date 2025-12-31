@@ -5,12 +5,22 @@ let anchorStars = [];
 let cometParticles = [];
 let webConnections = []; // Pre-calculated for rhythmic growth
 let lastMinute = -1;
-let starRadius = 200; // Radius of the 12-hour circle
+let starRadius; // Radius of the 12-hour circle
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 360, 100, 100, 100);
   
+  initializeClock();
+}
+
+function initializeClock() {
+  anchorStars = [];
+  // Responsive radius: 35% of the smaller screen dimension
+  starRadius = min(width, height) * 0.35;
+  // Cap it for very large desktop screens
+  if (starRadius > 240) starRadius = 240;
+
   // Initialize 12 anchor stars for the hours
   for (let i = 0; i < 12; i++) {
     let angle = map(i, 0, 12, -HALF_PI, TWO_PI - HALF_PI);
@@ -77,6 +87,7 @@ function generateWebConnections() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  initializeClock();
 }
 
 function draw() {
@@ -169,8 +180,6 @@ function drawMinuteWeb(min) {
     drawingContext.shadowBlur = 0;
   }
 }
-
-// Remove the Stardust class as it's no longer used
 
 function drawOrbitingComet(smoothSec) {
   let angle = map(smoothSec, 0, 60, -HALF_PI, TWO_PI - HALF_PI);
