@@ -91,6 +91,14 @@ function draw() {
     lastMinute = min;
   }
 
+  // Update star positions with noise once per frame
+  for (let i = 0; i < 12; i++) {
+    let star = anchorStars[i];
+    // More subtle drift: smaller range (12 instead of 20) and slower speed (0.007 instead of 0.01)
+    star.currentX = star.baseX + (noise(i * 10, frameCount * 0.008) * 14 - 6);
+    star.currentY = star.baseY + (noise(i * 10 + 100, frameCount * 0.007) * 14 - 6);
+  }
+
   // 1. Background Shift (Hour-based)
   let bgHue = map(hour(), 0, 23, 220, 300);
   background(bgHue, 80, 5, 100);
@@ -110,12 +118,8 @@ function draw() {
 function drawAnchorStars(hr) {
   for (let i = 0; i < 12; i++) {
     let star = anchorStars[i];
-    
-    // Noise-based drifting
-    let nX = noise(i * 10, frameCount * 0.01) * 15 - 7.5;
-    let nY = noise(i * 10 + 100, frameCount * 0.01) * 15 - 7.5;
-    let x = star.baseX + nX;
-    let y = star.baseY + nY;
+    let x = star.currentX;
+    let y = star.currentY;
 
     let isCurrentHour = (i === hr);
     
@@ -140,11 +144,11 @@ function drawMinuteWeb(min) {
   for (let count = 0; count < connectionsToDraw; count++) {
     let conn = webConnections[count];
     
-    // Current drifting positions
-    let x1 = anchorStars[conn.i].baseX + (noise(conn.i, frameCount * 0.005) * 15 - 7.5);
-    let y1 = anchorStars[conn.i].baseY + (noise(conn.i + 10, frameCount * 0.005) * 15 - 7.5);
-    let x2 = anchorStars[conn.j].baseX + (noise(conn.j, frameCount * 0.005) * 15 - 7.5);
-    let y2 = anchorStars[conn.j].baseY + (noise(conn.j + 10, frameCount * 0.005) * 15 - 7.5);
+    // Use the synced drifting positions
+    let x1 = anchorStars[conn.i].currentX;
+    let y1 = anchorStars[conn.i].currentY;
+    let x2 = anchorStars[conn.j].currentX;
+    let y2 = anchorStars[conn.j].currentY;
 
     let isRecent = (count >= connectionsToDraw - 1);
     let alpha = 80;
